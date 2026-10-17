@@ -1,14 +1,9 @@
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { requireNonAdmin } from "@/lib/requireRole";
 import PostAdForm from "@/components/PostAdForm";
 
 export default async function PostPage() {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) redirect("/login?next=/post");
+  // শুধু সাধারণ ইউজার — অ্যাডমিন হলে /admin এ পাঠিয়ে দেবে
+  const userId = await requireNonAdmin("/post");
 
   return (
     <div className="mx-auto max-w-2xl py-6">
@@ -16,7 +11,7 @@ export default async function PostPage() {
       <p className="mb-4 text-sm text-slate-600">
         ৫টি সহজ ধাপে আপনার মেস সিট / সাবলেট / রুমের বিজ্ঞাপন দিন — সম্পূর্ণ ফ্রি
       </p>
-      <PostAdForm userId={user.id} />
+      <PostAdForm userId={userId} />
     </div>
   );
 }

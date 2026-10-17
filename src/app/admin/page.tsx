@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/requireRole";
 import type {
   Listing,
   Profile,
@@ -11,31 +11,9 @@ import type {
 import AdminClient from "@/components/AdminClient";
 
 export default async function AdminPage() {
+  // শুধু অ্যাডমিন — সাধারণ ইউজার হলে /dashboard এ পাঠিয়ে দেবে
+  const userId = await requireAdmin();
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login?next=/admin");
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single();
-
-  if (!profile || (profile as { role: string }).role !== "admin") {
-    return (
-      <div className="mx-auto max-w-md py-16">
-        <div className="card p-8 text-center">
-          <p className="text-4xl">🔒</p>
-          <h1 className="mt-2 text-xl font-bold">অ্যাক্সেস নেই</h1>
-          <p className="mt-1 text-sm text-slate-600">
-            এই পেজ শুধু অ্যাডমিনদের জন্য।
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   const [{ data: users }, { data: listings }, { data: feedback }, { data: inquiries }, { data: ratings }, { data: notifications }] =
     await Promise.all([
@@ -82,7 +60,7 @@ export default async function AdminPage() {
         inquiries={(inquiries as Inquiry[]) || []}
         ratings={(ratings as RentalFeedback[]) || []}
         notifications={(notifications as Notification[]) || []}
-        currentUserId={user.id}
+        currentUserId={userId}
       />
     </div>
   );

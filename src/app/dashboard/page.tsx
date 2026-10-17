@@ -1,19 +1,17 @@
-import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { requireNonAdmin } from "@/lib/requireRole";
 import type { DashboardListing, Listing } from "@/lib/types";
 import DashboardClient from "@/components/DashboardClient";
 
 export default async function DashboardPage() {
+  // শুধু সাধারণ ইউজার — অ্যাডমিন হলে /admin এ পাঠিয়ে দেবে
+  const userId = await requireNonAdmin("/dashboard");
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login?next=/dashboard");
 
   const { data: listings } = await supabase
     .from("listings")
     .select("*, listing_photos(*)")
-    .eq("owner_id", user.id)
+    .eq("owner_id", userId)
     .order("created_at", { ascending: false });
 
   const withCounts: DashboardListing[] = await Promise.all(
