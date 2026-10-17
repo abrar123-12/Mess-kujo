@@ -52,6 +52,12 @@ export default function ChatWindow({
   const [reportBusy, setReportBusy] = useState(false);
   const [reported, setReported] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // ছবি পাঠানো
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [lightbox, setLightbox] = useState<string | null>(null);
 
   // নিচে স্ক্রল
   useEffect(() => {
@@ -125,6 +131,115 @@ export default function ChatWindow({
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [realtimeOk, conversationId]);
+
+  // ছবি ছোট করো (সর্বোচ্চ ১২৮০px, JPEG ০.৮) — ডেটা বাঁচাতে
+  const compressImage = (file: File): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const max = 1280;
+        let w = img.width;
+        let h = img.height;
+        if (w > max || h > max) {
+          const r = Math.min(max / w, max / h);
+          w = Math.round(w * r);
+          h = Math.round(h * r);
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("canvas"));
+          return;
+        }
+        ctx.drawImage(img, 0, 0, w, h);
+        canvas.toBlob(
+          (blob) => (blob ? resolve(blob) : reject(new Error("compress"))),
+          "image/jpeg",
+          0.8
+        );
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error("load"));
+      };
+      img.src = url;
+    });
+  };
+
+  const onPickImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    if (!f.type.startsWith("image/")) {
+      setMsg("❌ শুধু ছবি পাঠানো যাবে");
+      return;
+    }
+    setMsg("");
+    try {
+      const blob = await compressImage(f);
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setPreviewBlob(blob);
+      setPreviewUrl(URL.createObjectURL(blob));
+    } catch {
+      setMsg("❌ ছবি প্রসেস করা যায়নি");
+    }
+  };
+
+  const cancelPreview = () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+    setPreviewBlob(null);
+  };
+
+  const sendImage = async () => {
+    if (!previewBlob || uploading || sending) return;
+    setMsg("");
+    const res = await checkActiveUser(supabase);
+    if (!res.ok) {
+      if (res.banned) {
+        setMsg(BANNED_MESSAGE);
+        return;
+      }
+      router.push("/login");
+      return;
+    }
+    setUploading(true);
+    try {
+      const path = `${conversationId}/${crypto.randomUUID()}.jpg`;
+      const { error: upErr } = await supabase.storage
+        .from("chat-photos")
+        .upload(path, previewBlob, { contentType: "image/jpeg" });
+      if (upErr) throw upErr;
+      const { data: urlData } = supabase.storage
+        .from("chat-photos")
+        .getPublicUrl(path);
+      const { data, error } = await supabase
+        .from("messages")
+        .insert({
+          conversation_id: conversationId,
+          sender_id: currentUserId,
+          body: input.trim().slice(0, 2000),
+          image_url: urlData.publicUrl,
+        })
+        .select("*")
+        .single();
+      if (error || !data) throw error || new Error("insert failed");
+      const m = data as ChatMessage;
+      setMessages((prev) =>
+        prev.some((x) => x.id === m.id) ? prev : [...prev, m]
+      );
+      cancelPreview();
+      setInput("");
+      markRead();
+    } catch {
+      setMsg("❌ ছবি যায়নি, আবার চেষ্টা করুন");
+    }
+    setUploading(false);
+  };
 
   const send = async () => {
     const body = input.trim();
@@ -230,15 +345,39 @@ export default function ChatWindow({
           return (
             <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
               <div
-                className={`max-w-[80%] rounded-2xl px-3 py-2 text-[15px] leading-snug ${
+                className={`max-w-[80%] rounded-2xl text-[15px] leading-snug ${
+                  m.image_url ? "p-1.5" : "px-3 py-2"
+                } ${
                   mine
                     ? "rounded-br-sm bg-emerald-600 text-white"
                     : "rounded-bl-sm border border-slate-200 bg-white text-slate-800"
                 }`}
               >
-                <p className="whitespace-pre-wrap break-words">{m.body}</p>
+                {m.image_url && (
+                  <button
+                    onClick={() => setLightbox(m.image_url)}
+                    className="block w-full"
+                    aria-label="ছবি বড় করে দেখুন"
+                  >
+                    <img
+                      src={m.image_url}
+                      alt="চ্যাটের ছবি"
+                      loading="lazy"
+                      className="max-h-56 w-full rounded-xl object-cover"
+                    />
+                  </button>
+                )}
+                {m.body ? (
+                  <p
+                    className={`whitespace-pre-wrap break-words ${
+                      m.image_url ? "px-1.5 pt-1" : ""
+                    }`}
+                  >
+                    {m.body}
+                  </p>
+                ) : null}
                 <p
-                  className={`mt-0.5 text-right text-[11px] ${
+                  className={`mt-0.5 px-1.5 text-right text-[11px] ${
                     mine ? "text-emerald-100" : "text-slate-400"
                   }`}
                 >
@@ -256,26 +395,73 @@ export default function ChatWindow({
         </p>
       )}
 
+      {/* ছবির প্রিভিউ */}
+      {previewUrl && (
+        <div className="border-t border-slate-200 bg-slate-50 p-2.5">
+          <div className="relative inline-block">
+            <img
+              src={previewUrl}
+              alt="ছবির প্রিভিউ"
+              className="h-24 rounded-lg border border-slate-200 object-cover"
+            />
+            <button
+              onClick={cancelPreview}
+              aria-label="ছবি বাতিল করুন"
+              className="absolute -right-2 -top-2 rounded-full bg-red-600 px-1.5 py-0.5 text-xs font-bold text-white shadow"
+            >
+              ✕
+            </button>
+          </div>
+          <p className="mt-1 text-xs text-slate-500">
+            {uploading
+              ? "📤 ছবি পাঠানো হচ্ছে..."
+              : "ক্যাপশন লিখতে চাইলে নিচে লিখুন, তারপর ➤ চাপুন"}
+          </p>
+        </div>
+      )}
+
       {/* ইনপুট */}
       <div className="flex items-center gap-2 border-t border-slate-200 bg-white p-2.5">
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          onChange={onPickImage}
+          className="hidden"
+          aria-label="ছবি বাছুন"
+        />
+        <button
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading || sending}
+          aria-label="ছবি পাঠান"
+          className="rounded-lg px-2 py-2 text-xl hover:bg-slate-100 disabled:opacity-50"
+        >
+          📷
+        </button>
         <input
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") send();
+            if (e.key === "Enter") {
+              if (previewBlob) sendImage();
+              else send();
+            }
           }}
-          placeholder="মেসেজ লিখুন..."
+          placeholder={previewBlob ? "ক্যাপশন (ঐচ্ছিক)..." : "মেসেজ লিখুন..."}
           maxLength={2000}
           className="!py-2"
         />
         <button
-          onClick={send}
-          disabled={sending || !input.trim()}
+          onClick={() => {
+            if (previewBlob) sendImage();
+            else send();
+          }}
+          disabled={sending || uploading || (!input.trim() && !previewBlob)}
           className="btn-primary !px-4 !py-2 text-lg"
           aria-label="পাঠান"
         >
-          {sending ? "…" : "➤"}
+          {sending || uploading ? "…" : "➤"}
         </button>
       </div>
 
@@ -334,6 +520,27 @@ export default function ChatWindow({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ছবির লাইটবক্স */}
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 p-4"
+          onClick={() => setLightbox(null)}
+        >
+          <button
+            aria-label="বন্ধ করুন"
+            className="absolute right-4 top-4 rounded-full bg-white/20 px-3 py-1.5 text-2xl text-white"
+          >
+            ✕
+          </button>
+          <img
+            src={lightbox}
+            alt="বড় ছবি"
+            className="max-h-full max-w-full rounded-lg object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
         </div>
       )}
     </div>
