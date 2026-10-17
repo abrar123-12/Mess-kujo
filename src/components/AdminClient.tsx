@@ -12,8 +12,16 @@ import type {
   Notification,
 } from "@/lib/types";
 import { typeLabel, statusLabel } from "@/lib/data";
+import AdminChatViewer from "@/components/AdminChatViewer";
 
-type Tab = "listings" | "users" | "feedback" | "inquiries" | "ratings" | "notices";
+type Tab =
+  | "listings"
+  | "users"
+  | "feedback"
+  | "inquiries"
+  | "ratings"
+  | "notices"
+  | "chats";
 
 function feedbackTypeLabel(t: string): string {
   if (t === "bug") return "🐞 সমস্যা";
@@ -205,6 +213,17 @@ export default function AdminClient({
       setNSelectedUserId(null);
       setNUserSearch("");
       alert("✅ নোটিশ পাঠানো হয়েছে!");
+      // রিয়েল পুশ নোটিফিকেশনও পাঠাও (ফোনে আসবে) — ব্যর্থ হলেও সমস্যা নেই
+      fetch("/api/push/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          message,
+          target_user_id: targetId,
+          url: "/",
+        }),
+      }).catch(() => {});
     }
     setNSending(false);
   };
@@ -317,7 +336,10 @@ export default function AdminClient({
         {tabBtn("inquiries", `📞 যোগাযোগ (${inquiries.length})`)}
         {tabBtn("ratings", `⭐ রেটিং (${ratings.length})`)}
         {tabBtn("notices", `🔔 নোটিশ (${noticeList.length})`)}
+        {tabBtn("chats", `💬 চ্যাট মনিটর`)}
       </div>
+
+      {tab === "chats" && <AdminChatViewer />}
 
       {tab === "users" && (
         <div className="space-y-3">

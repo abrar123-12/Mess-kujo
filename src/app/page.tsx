@@ -6,7 +6,8 @@ import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Listing, NearbyListing } from "@/lib/types";
 import ListingCard from "@/components/ListingCard";
-import FilterBar from "@/components/FilterBar";
+import FilterBar, { type SortKey } from "@/components/FilterBar";
+import PushOptIn from "@/components/PushOptIn";
 
 const RADII = [2, 5, 10];
 
@@ -18,6 +19,7 @@ function HomePageContent() {
   const [ward, setWard] = useState("");
   const [type, setType] = useState("");
   const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<SortKey>("new");
 
   // কাছাকাছি খোঁজা
   const [nearMe, setNearMe] = useState(false);
@@ -118,19 +120,27 @@ function HomePageContent() {
 
   const baseList: Listing[] = nearMe && nearResults ? nearResults : listings;
 
-  const filtered = baseList.filter((l) => {
-    if (thana && l.thana !== thana) return false;
-    if (ward && l.ward !== ward) return false;
-    if (type && l.type !== type) return false;
-    if (query) {
-      const q = query.toLowerCase();
-      const hay = `${l.title} ${l.thana} ${l.ward} ${l.address || ""} ${
-        l.description || ""
-      }`.toLowerCase();
-      if (!hay.includes(q)) return false;
-    }
-    return true;
-  });
+  const filtered = baseList
+    .filter((l) => {
+      if (thana && l.thana !== thana) return false;
+      if (ward && l.ward !== ward) return false;
+      if (type && l.type !== type) return false;
+      if (query) {
+        const q = query.toLowerCase();
+        const hay = `${l.title} ${l.thana} ${l.ward} ${l.address || ""} ${
+          l.description || ""
+        }`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      // ফিচার্ড সবসময় আগে, তারপর সাজান অনুযায়ী
+      if (a.is_featured !== b.is_featured) return a.is_featured ? -1 : 1;
+      const ta = new Date(a.created_at).getTime();
+      const tb = new Date(b.created_at).getTime();
+      return sort === "old" ? ta - tb : tb - ta;
+    });
 
   const distanceOf = (l: Listing): number | undefined =>
     "distance_km" in l ? (l as NearbyListing).distance_km : undefined;
@@ -151,6 +161,11 @@ function HomePageContent() {
         >
           + ফ্রিতে বিজ্ঞাপন দিন
         </Link>
+      </div>
+
+      {/* পুশ নোটিফিকেশন চালুর প্রম্পট (লগইন করা থাকলে, একবার) */}
+      <div className="mt-4">
+        <PushOptIn />
       </div>
 
       {/* কাছাকাছি */}
@@ -207,15 +222,18 @@ function HomePageContent() {
           ward={ward}
           type={type}
           query={query}
+          sort={sort}
           onThana={setThana}
           onWard={setWard}
           onType={setType}
           onQuery={setQuery}
+          onSort={setSort}
           onReset={() => {
             setThana("");
             setWard("");
             setType("");
             setQuery("");
+            setSort("new");
           }}
         />
       </div>
