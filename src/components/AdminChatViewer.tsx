@@ -65,7 +65,7 @@ export default function AdminChatViewer() {
               .maybeSingle(),
             supabase
               .from("messages")
-              .select("body")
+              .select("body,image_url")
               .eq("conversation_id", x.id)
               .order("created_at", { ascending: false })
               .limit(1)
@@ -83,7 +83,9 @@ export default function AdminChatViewer() {
             owner_name:
               (owner.data as { name: string | null } | null)?.name || null,
             last_message_body:
-              (lastMsg.data as { body: string } | null)?.body || null,
+              (lastMsg.data as { body: string; image_url: string | null } | null)?.image_url
+                ? "📷 ছবি পাঠানো হয়েছে"
+                : (lastMsg.data as { body: string } | null)?.body || null,
             message_count: cnt.count || 0,
           };
         })
@@ -248,9 +250,25 @@ export default function AdminChatViewer() {
                                     ? `🙋 ${c.renter_name || "ভাড়াটিয়া"}`
                                     : `🧑‍💼 ${c.owner_name || "মালিক"}`}
                                 </p>
-                                <p className="whitespace-pre-wrap break-words">
-                                  {m.body}
-                                </p>
+                                {(m as { image_url?: string | null }).image_url && (
+                                  <a
+                                    href={(m as { image_url?: string | null }).image_url!}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    <img
+                                      src={(m as { image_url?: string | null }).image_url!}
+                                      alt="চ্যাটের ছবি"
+                                      className="mb-1 max-h-48 rounded-lg object-cover"
+                                      loading="lazy"
+                                    />
+                                  </a>
+                                )}
+                                {m.body && (
+                                  <p className="whitespace-pre-wrap break-words">
+                                    {m.body}
+                                  </p>
+                                )}
                                 <p className="text-right text-[10px] text-slate-400">
                                   {bnDate(m.created_at)}
                                 </p>
