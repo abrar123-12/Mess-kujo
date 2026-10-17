@@ -3,15 +3,23 @@
 import Link from "next/link";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { DashboardListing } from "@/lib/types";
+import type { DashboardListing, ConversationPreview } from "@/lib/types";
 import { typeLabel, statusLabel } from "@/lib/data";
+import ChatList from "@/components/ChatList";
 
 export default function DashboardClient({
   listings,
+  conversations,
+  totalUnread,
+  userId,
 }: {
   listings: DashboardListing[];
+  conversations: ConversationPreview[];
+  totalUnread: number;
+  userId: string;
 }) {
   const supabase = createClient();
+  const [dtab, setDtab] = useState<"ads" | "chat">("ads");
   const [items, setItems] = useState(listings);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -83,19 +91,44 @@ export default function DashboardClient({
     setBusyId(null);
   };
 
-  if (!items.length) {
-    return (
-      <div className="card p-8 text-center">
-        <p className="text-4xl">📭</p>
-        <p className="mt-2 font-semibold">এখনো কোনো বিজ্ঞাপন দেননি</p>
-        <Link href="/post" className="btn-primary mt-4">
-          + প্রথম বিজ্ঞাপন দিন
-        </Link>
-      </div>
-    );
-  }
+  const tabBtn = (t: "ads" | "chat", label: string) => (
+    <button
+      key={t}
+      onClick={() => setDtab(t)}
+      className={`flex-1 rounded-lg px-3 py-2 text-sm font-bold ${
+        dtab === t
+          ? "bg-emerald-600 text-white"
+          : "bg-white text-slate-600 border border-slate-200"
+      }`}
+    >
+      {label}
+    </button>
+  );
 
   return (
+    <div>
+      {/* ট্যাব */}
+      <div className="mb-3 flex gap-2">
+        {tabBtn("ads", `📊 বিজ্ঞাপন (${items.length})`)}
+        {tabBtn(
+          "chat",
+          `💬 চ্যাট (${conversations.length})${
+            totalUnread > 0 ? ` • ${totalUnread} নতুন` : ""
+          }`
+        )}
+      </div>
+
+      {dtab === "chat" ? (
+        <ChatList conversations={conversations} currentUserId={userId} />
+      ) : items.length === 0 ? (
+        <div className="card p-8 text-center">
+          <p className="text-4xl">📭</p>
+          <p className="mt-2 font-semibold">এখনো কোনো বিজ্ঞাপন দেননি</p>
+          <Link href="/post" className="btn-primary mt-4">
+            + প্রথম বিজ্ঞাপন দিন
+          </Link>
+        </div>
+      ) : (
     <div className="space-y-3">
       {items.map((l) => (
         <div key={l.id} className="card p-3">
@@ -221,6 +254,8 @@ export default function DashboardClient({
             </div>
           </div>
         </div>
+      )}
+      </div>
       )}
     </div>
   );

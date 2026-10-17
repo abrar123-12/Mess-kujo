@@ -6,7 +6,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import type { Listing } from "@/lib/types";
 import { typeLabel } from "@/lib/data";
-import { BANNED_MESSAGE } from "@/lib/requireActiveUser";
+import { BANNED_MESSAGE, checkActiveUser } from "@/lib/requireActiveUser";
 
 export default function ListingDetail({
   listing,
@@ -67,6 +67,45 @@ export default function ListingDetail({
     }
     setPhoneShown(true);
     setMsg("✅ আপনার আগ্রহ মালিকের কাছে পৌঁছেছে");
+  };
+
+  // 💬 মালিকের সাথে চ্যাট → thread খুঁজে/বানিয়ে চ্যাট পেজে যাও
+  const startChat = async () => {
+    setMsg("");
+    const res = await checkActiveUser(supabase);
+    if (!res.ok) {
+      if (res.banned) {
+        setMsg(BANNED_MESSAGE);
+        return;
+      }
+      router.push(`/login?next=/listing/${listing.id}`);
+      return;
+    }
+    const uid = res.userId;
+    setBusy(true);
+    // আগের thread আছে?
+    const { data: existing } = await supabase
+      .from("conversations")
+      .select("id")
+      .eq("listing_id", listing.id)
+      .eq("renter_id", uid)
+      .maybeSingle();
+    let convId = (existing as { id: string } | null)?.id;
+    if (!convId) {
+      const { data, error } = await supabase
+        .from("conversations")
+        .insert({ listing_id: listing.id, renter_id: uid })
+        .select("id")
+        .single();
+      if (error || !data) {
+        setBusy(false);
+        setMsg("❌ সমস্যা হয়েছে, আবার চেষ্টা করুন");
+        return;
+      }
+      convId = (data as { id: string }).id;
+    }
+    setBusy(false);
+    router.push(`/chat/${convId}`);
   };
 
   // এখনো খালি আছে? → মালিকের কাছে nudge
@@ -193,6 +232,9 @@ export default function ListingDetail({
             <div className="mt-4 grid grid-cols-1 gap-2">
               <button onClick={contact} disabled={busy} className="btn-primary w-full">
                 📞 যোগাযোগ করুন
+              </button>
+              <button onClick={startChat} disabled={busy} className="btn-primary w-full !bg-sky-600 hover:!bg-sky-700">
+                💬 মালিকের সাথে চ্যাট
               </button>
               <button onClick={nudge} disabled={busy} className="btn-secondary w-full">
                 ❓ এখনো খালি আছে?
