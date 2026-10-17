@@ -70,6 +70,8 @@ export interface Profile {
   name: string | null;
   phone: string | null;
   role: string;
+  is_banned: boolean;
+  banned_at: string | null;
   created_at: string;
 }
 

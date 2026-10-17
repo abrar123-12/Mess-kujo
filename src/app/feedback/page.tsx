@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { checkActiveUser, BANNED_MESSAGE } from "@/lib/requireActiveUser";
 
 const TYPES = [
   { value: "feature", label: "💡 ফিচার রিকোয়েস্ট" },
@@ -42,6 +43,14 @@ export default function FeedbackPage() {
       return;
     }
     setBusy(true);
+    // স্থগিত অ্যাকাউন্ট ফিডব্যাক পাঠাতে পারবে না
+    const active = await checkActiveUser(supabase);
+    if (!active.ok) {
+      setError(active.banned ? BANNED_MESSAGE : "❌ লগইন করুন");
+      setBusy(false);
+      if (active.banned) router.push("/");
+      return;
+    }
     const { error } = await supabase.from("feedback").insert({
       user_id: userId,
       type,

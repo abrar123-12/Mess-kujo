@@ -1,20 +1,37 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useState } from "react";
+import { Suspense, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import Turnstile, { TurnstileHandle } from "@/components/Turnstile";
+import { BANNED_MESSAGE } from "@/lib/requireActiveUser";
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
   const next = searchParams.get("next") || "/";
+  const signedUp = searchParams.get("signed_up") === "1";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const captchaTokenRef = useRef<string | null>(null);
+  const turnstileRef = useRef<TurnstileHandle>(null);
+
+  const handleVerify = (token: string | null) => {
+    if (token === null && captchaTokenRef.current !== null) {
+      // Token expired after being issued — user must verify again
+      setError("❌ সিকিউরিটি যাচাই ব্যর্থ হয়েছে, আবার চেষ্টা করুন।");
+    } else if (token !== null) {
+      setError((e) => (e.includes("সিকিউরিটি যাচাই") ? "" : e));
+    }
+    captchaTokenRef.current = token;
+    setCaptchaToken(token);
+  };
 
   const login = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,11 +40,37 @@ function LoginForm() {
     const { error } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password,
+      options: captchaToken ? { captchaToken } : undefined,
     });
     setBusy(false);
     if (error) {
-      setError("❌ " + error.message);
+      turnstileRef.current?.reset();
+      captchaTokenRef.current = null;
+      setCaptchaToken(null);
+      const msg = /captcha/i.test(error.message)
+        ? "সিকিউরিটি যাচাই ব্যর্থ হয়েছে, আবার চেষ্টা করুন।"
+        : error.message;
+      setError("❌ " + msg);
       return;
+    }
+    // স্থগিত অ্যাকাউন্ট হলে ঢুকতে দিও না
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("is_banned")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (
+        profile &&
+        (profile as { is_banned: boolean }).is_banned
+      ) {
+        await supabase.auth.signOut();
+        setError("❌ " + BANNED_MESSAGE);
+        return;
+      }
     }
     router.push(next);
     router.refresh();
@@ -41,6 +84,11 @@ function LoginForm() {
           বিজ্ঞাপন দিতে ও যোগাযোগ করতে লগইন করুন
         </p>
         <form onSubmit={login} className="mt-4 space-y-3">
+          {signedUp && (
+            <p className="rounded-lg bg-green-50 p-2 text-sm font-medium text-green-700">
+              ✅ অ্যাকাউন্ট তৈরি হয়েছে! এবার লগইন করুন।
+            </p>
+          )}
           <div>
             <label className="label">ইমেইল</label>
             <input
@@ -66,6 +114,7 @@ function LoginForm() {
               {error}
             </p>
           )}
+          <Turnstile ref={turnstileRef} onVerify={handleVerify} />
           <button type="submit" disabled={busy} className="btn-primary w-full">
             {busy ? "লগইন হচ্ছে..." : "লগইন"}
           </button>

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import type { Listing } from "@/lib/types";
 import { typeLabel } from "@/lib/data";
+import { BANNED_MESSAGE } from "@/lib/requireActiveUser";
 
 export default function ListingDetail({
   listing,
@@ -42,6 +43,18 @@ export default function ListingDetail({
     const uid = await needLogin();
     if (!uid) return;
     setBusy(true);
+    // স্থগিত অ্যাকাউন্ট যোগাযোগ করতে পারবে না
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("is_banned")
+      .eq("id", uid)
+      .maybeSingle();
+    if (profile && (profile as { is_banned: boolean }).is_banned) {
+      await supabase.auth.signOut();
+      setMsg(BANNED_MESSAGE);
+      setBusy(false);
+      return;
+    }
     const { error } = await supabase.from("inquiries").insert({
       listing_id: listing.id,
       from_user_id: uid,

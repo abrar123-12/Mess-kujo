@@ -75,6 +75,7 @@ export default async function AdminPage() {
         feedback={(feedback as Feedback[]) || []}
         inquiries={(inquiries as Inquiry[]) || []}
         ratings={(ratings as RentalFeedback[]) || []}
+        currentUserId={user.id}
       />
     </div>
   );

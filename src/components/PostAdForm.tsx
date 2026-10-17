@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { THANAS, WARDS, LISTING_TYPES, typeLabel } from "@/lib/data";
 import LocationPicker, { type LatLng } from "@/components/LocationPicker";
+import { checkActiveUser, BANNED_MESSAGE } from "@/lib/requireActiveUser";
 
 const STEPS = ["শিরোনাম", "এলাকা", "লোকেশন", "ভাড়া ও যোগাযোগ", "ছবি", "রিভিউ"];
 const LAST_STEP = STEPS.length - 1;
@@ -73,6 +74,14 @@ export default function PostAdForm({ userId }: { userId: string }) {
   const submit = async () => {
     setError("");
     setBusy(true);
+    // স্থগিত অ্যাকাউন্ট বিজ্ঞাপন দিতে পারবে না
+    const active = await checkActiveUser(supabase);
+    if (!active.ok) {
+      setError(active.banned ? BANNED_MESSAGE : "❌ লগইন করুন");
+      setBusy(false);
+      if (active.banned) router.push("/");
+      return;
+    }
     try {
       const { data: listing, error: insErr } = await supabase
         .from("listings")

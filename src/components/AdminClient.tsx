@@ -33,16 +33,21 @@ export default function AdminClient({
   feedback,
   inquiries,
   ratings,
+  currentUserId,
 }: {
   users: Profile[];
   listings: Listing[];
   feedback: Feedback[];
   inquiries: Inquiry[];
   ratings: RentalFeedback[];
+  currentUserId: string;
 }) {
   const supabase = createClient();
-  const [tab, setTab] = useState<Tab>("listings");
+  const [tab, setTab] = useState<Tab>("users");
   const [items, setItems] = useState(listings);
+  const [userList, setUserList] = useState(users);
+  const [userSearch, setUserSearch] = useState("");
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const feature = async (id: string) => {
@@ -92,6 +97,109 @@ export default function AdminClient({
     setBusyId(null);
   };
 
+  // ---------- সুপার ইউজার ম্যানেজমেন্ট ----------
+  const isSelf = (id: string) => id === currentUserId;
+
+  const setBan = async (u: Profile, ban: boolean) => {
+    if (isSelf(u.id)) return;
+    const label = u.name || u.phone || u.email || "ইউজার";
+    if (
+      !confirm(
+        ban
+          ? `⛔ "${label}" কে স্থগিত করবেন?\n(লগইন ও সব কাজ বন্ধ হয়ে যাবে)`
+          : `✅ "${label}" কে আবার সক্রিয় করবেন?`
+      )
+    )
+      return;
+    setBusyId(u.id);
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from("profiles")
+      .update({ is_banned: ban, banned_at: ban ? now : null })
+      .eq("id", u.id);
+    if (!error) {
+      setUserList((list) =>
+        list.map((x) =>
+          x.id === u.id
+            ? { ...x, is_banned: ban, banned_at: ban ? now : null }
+            : x
+        )
+      );
+    } else {
+      alert("❌ ব্যর্থ: " + error.message);
+    }
+    setBusyId(null);
+  };
+
+  const toggleRole = async (u: Profile) => {
+    if (isSelf(u.id)) return;
+    const toAdmin = u.role !== "admin";
+    const label = u.name || u.phone || u.email || "ইউজার";
+    if (
+      !confirm(
+        toAdmin
+          ? `👑 "${label}" কে অ্যাডমিন বানাবেন?`
+          : `⚠️ "${label}" এর অ্যাডমিন ক্ষমতা বাতিল করবেন?`
+      )
+    )
+      return;
+    setBusyId(u.id);
+    const { error } = await supabase
+      .from("profiles")
+      .update({ role: toAdmin ? "admin" : "user" })
+      .eq("id", u.id);
+    if (!error) {
+      setUserList((list) =>
+        list.map((x) =>
+          x.id === u.id ? { ...x, role: toAdmin ? "admin" : "user" } : x
+        )
+      );
+    } else {
+      alert("❌ ব্যর্থ: " + error.message);
+    }
+    setBusyId(null);
+  };
+
+  // ইউজার পরিসংখ্যান
+  const weekAgo = Date.now() - 7 * 86400000;
+  const statTotal = userList.length;
+  const statNew = userList.filter(
+    (u) => new Date(u.created_at).getTime() >= weekAgo
+  ).length;
+  const statBanned = userList.filter((u) => u.is_banned).length;
+  const statAdmins = userList.filter((u) => u.role === "admin").length;
+
+  // সার্চ ফিল্টার
+  const uq = userSearch.trim().toLowerCase();
+  const filteredUsers = userList.filter(
+    (u) =>
+      !uq ||
+      (u.name || "").toLowerCase().includes(uq) ||
+      (u.phone || "").toLowerCase().includes(uq) ||
+      (u.email || "").toLowerCase().includes(uq)
+  );
+
+  const listingCountOf = (uid: string) =>
+    listings.filter((l) => l.owner_id === uid).length;
+
+  // ডিটেইল মোডালের জন্য নির্বাচিত ইউজারের তথ্য
+  const selected =
+    selectedUserId != null
+      ? userList.find((u) => u.id === selectedUserId) ?? null
+      : null;
+  const selListings = selected
+    ? listings.filter((l) => l.owner_id === selected.id)
+    : [];
+  const selInquiries = selected
+    ? inquiries.filter((x) => x.from_user_id === selected.id)
+    : [];
+  const selFeedback = selected
+    ? feedback.filter((f) => f.user_id === selected.id)
+    : [];
+  const selRatings = selected
+    ? ratings.filter((r) => r.rater_id === selected.id)
+    : [];
+
   const tabBtn = (t: Tab, label: string) => (
     <button
       key={t}
@@ -121,48 +229,168 @@ export default function AdminClient({
     <div>
       <div className="mb-4 flex flex-wrap gap-2">
         {tabBtn("listings", `🏠 লিস্টিং (${items.length})`)}
-        {tabBtn("users", `👥 ইউজার (${users.length})`)}
+        {tabBtn("users", `👥 ইউজার (${userList.length})`)}
         {tabBtn("feedback", `💬 ফিডব্যাক (${feedback.length})`)}
         {tabBtn("inquiries", `📞 যোগাযোগ (${inquiries.length})`)}
         {tabBtn("ratings", `⭐ রেটিং (${ratings.length})`)}
       </div>
 
       {tab === "users" && (
-        <div className="card overflow-x-auto">
-          <table className="w-full min-w-[560px] text-sm">
-            <thead>
-              <tr className="bg-slate-50 text-left">
-                <th className="p-2">নাম</th>
-                <th className="p-2">ফোন</th>
-                <th className="p-2">ইমেইল</th>
-                <th className="p-2">রোল</th>
-                <th className="p-2">যোগদান</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => (
-                <tr key={u.id} className="border-t">
-                  <td className="p-2 font-semibold">{u.name || "—"}</td>
-                  <td className="p-2">{u.phone || "—"}</td>
-                  <td className="p-2">{u.email || "—"}</td>
-                  <td className="p-2">
-                    <span
-                      className={`badge ${
-                        u.role === "admin"
-                          ? "bg-purple-100 text-purple-800"
-                          : "bg-slate-100 text-slate-600"
-                      }`}
-                    >
-                      {u.role}
-                    </span>
-                  </td>
-                  <td className="p-2 text-xs text-slate-500">
-                    {new Date(u.created_at).toLocaleDateString("bn-BD")}
-                  </td>
+        <div className="space-y-3">
+          {/* পরিসংখ্যান কার্ড */}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="card p-3 text-center">
+              <p className="text-2xl font-extrabold text-slate-800">
+                {statTotal}
+              </p>
+              <p className="text-xs text-slate-500">👥 মোট ইউজার</p>
+            </div>
+            <div className="card p-3 text-center">
+              <p className="text-2xl font-extrabold text-emerald-700">
+                {statNew}
+              </p>
+              <p className="text-xs text-slate-500">🆕 নতুন (৭ দিনে)</p>
+            </div>
+            <div className="card p-3 text-center">
+              <p className="text-2xl font-extrabold text-red-600">
+                {statBanned}
+              </p>
+              <p className="text-xs text-slate-500">⛔ স্থগিত</p>
+            </div>
+            <div className="card p-3 text-center">
+              <p className="text-2xl font-extrabold text-purple-700">
+                {statAdmins}
+              </p>
+              <p className="text-xs text-slate-500">👑 অ্যাডমিন</p>
+            </div>
+          </div>
+
+          {/* সার্চ */}
+          <input
+            type="search"
+            value={userSearch}
+            onChange={(e) => setUserSearch(e.target.value)}
+            placeholder="🔍 নাম / ফোন / ইমেইল দিয়ে খুঁজুন..."
+            className="w-full"
+          />
+
+          {/* ইউজার টেবিল */}
+          <div className="card overflow-x-auto">
+            <table className="w-full min-w-[760px] text-sm">
+              <thead>
+                <tr className="bg-slate-50 text-left">
+                  <th className="p-2">নাম</th>
+                  <th className="p-2">ফোন</th>
+                  <th className="p-2">ইমেইল</th>
+                  <th className="p-2">রোল</th>
+                  <th className="p-2">বিজ্ঞাপন</th>
+                  <th className="p-2">যোগদান</th>
+                  <th className="p-2">স্ট্যাটাস</th>
+                  <th className="p-2">অ্যাকশন</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filteredUsers.map((u) => (
+                  <tr
+                    key={u.id}
+                    onClick={() => setSelectedUserId(u.id)}
+                    className="cursor-pointer border-t hover:bg-slate-50"
+                  >
+                    <td className="p-2 font-semibold">
+                      {u.name || "—"}
+                      {isSelf(u.id) && (
+                        <span className="badge ml-1 bg-blue-100 text-blue-800">
+                          আপনি
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-2" onClick={(e) => e.stopPropagation()}>
+                      {u.phone ? (
+                        <a
+                          href={`tel:${u.phone}`}
+                          className="font-semibold text-emerald-700"
+                        >
+                          📞 {u.phone}
+                        </a>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className="p-2">{u.email || "—"}</td>
+                    <td className="p-2">
+                      <span
+                        className={`badge ${
+                          u.role === "admin"
+                            ? "bg-purple-100 text-purple-800"
+                            : "bg-slate-100 text-slate-600"
+                        }`}
+                      >
+                        {u.role === "admin" ? "👑 অ্যাডমিন" : "👤 ইউজার"}
+                      </span>
+                    </td>
+                    <td className="p-2 text-center font-semibold">
+                      {listingCountOf(u.id)}
+                    </td>
+                    <td className="p-2 text-xs text-slate-500">
+                      {new Date(u.created_at).toLocaleDateString("bn-BD")}
+                    </td>
+                    <td className="p-2">
+                      {u.is_banned ? (
+                        <span className="badge bg-red-100 text-red-700">
+                          ⛔ স্থগিত
+                        </span>
+                      ) : (
+                        <span className="badge bg-emerald-100 text-emerald-700">
+                          ✅ সক্রিয়
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-2" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => setBan(u, !u.is_banned)}
+                          disabled={isSelf(u.id) || busyId === u.id}
+                          title={
+                            isSelf(u.id)
+                              ? "নিজেকে পরিবর্তন করা যাবে না"
+                              : u.is_banned
+                              ? "সক্রিয় করুন"
+                              : "স্থগিত করুন"
+                          }
+                          className="rounded-lg border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100 disabled:opacity-40"
+                        >
+                          {u.is_banned ? "✅" : "⛔"}
+                        </button>
+                        <button
+                          onClick={() => toggleRole(u)}
+                          disabled={isSelf(u.id) || busyId === u.id}
+                          title={
+                            isSelf(u.id)
+                              ? "নিজেকে পরিবর্তন করা যাবে না"
+                              : u.role === "admin"
+                              ? "অ্যাডমিন বাতিল"
+                              : "অ্যাডমিন করুন"
+                          }
+                          className="rounded-lg border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100 disabled:opacity-40"
+                        >
+                          👑
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!filteredUsers.length && (
+              <p className="p-6 text-center text-sm text-slate-500">
+                {userSearch ? "🔍 কিছু পাওয়া যায়নি" : "কোনো ইউজার নেই"}
+              </p>
+            )}
+          </div>
+          <p className="text-xs text-slate-500">
+            💡 কোনো রো-তে ট্যাপ করলে ইউজারের বিস্তারিত (বিজ্ঞাপন, যোগাযোগ,
+            ফিডব্যাক, রেটিং) দেখা যাবে।
+          </p>
         </div>
       )}
 
@@ -369,6 +597,215 @@ export default function AdminClient({
               এখনো কোনো রেটিং আসেনি
             </p>
           )}
+        </div>
+      )}
+      {/* ইউজার ডিটেইল মোডাল */}
+      {selected && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center sm:p-4"
+          onClick={() => setSelectedUserId(null)}
+        >
+          <div
+            className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white p-4 sm:rounded-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h3 className="text-lg font-bold">
+                  {selected.name || "নাম নেই"}
+                  {isSelf(selected.id) && (
+                    <span className="badge ml-2 bg-blue-100 text-blue-800">
+                      আপনি
+                    </span>
+                  )}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  {selected.email || "ইমেইল নেই"}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedUserId(null)}
+                className="rounded-lg border border-slate-300 px-3 py-1.5 hover:bg-slate-100"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+              <div className="rounded-lg bg-slate-50 p-2">
+                📞{" "}
+                {selected.phone ? (
+                  <a
+                    href={`tel:${selected.phone}`}
+                    className="font-semibold text-emerald-700"
+                  >
+                    {selected.phone}
+                  </a>
+                ) : (
+                  "—"
+                )}
+              </div>
+              <div className="rounded-lg bg-slate-50 p-2">
+                🎭 {selected.role === "admin" ? "👑 অ্যাডমিন" : "👤 ইউজার"}
+              </div>
+              <div className="rounded-lg bg-slate-50 p-2">
+                📅{" "}
+                {new Date(selected.created_at).toLocaleDateString("bn-BD")}
+              </div>
+              <div className="rounded-lg bg-slate-50 p-2">
+                🚦 {selected.is_banned ? "⛔ স্থগিত" : "✅ সক্রিয়"}
+              </div>
+            </div>
+
+            {!isSelf(selected.id) ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  onClick={() => setBan(selected, !selected.is_banned)}
+                  disabled={busyId === selected.id}
+                  className={
+                    selected.is_banned
+                      ? "btn-secondary !px-3 !py-1.5 text-sm"
+                      : "!px-3 !py-1.5 text-sm rounded-lg border border-red-300 text-red-600 hover:bg-red-50"
+                  }
+                >
+                  {selected.is_banned
+                    ? "✅ সক্রিয় করুন"
+                    : "⛔ স্থগিত করুন"}
+                </button>
+                <button
+                  onClick={() => toggleRole(selected)}
+                  disabled={busyId === selected.id}
+                  className="btn-secondary !px-3 !py-1.5 text-sm"
+                >
+                  {selected.role === "admin"
+                    ? "⚠️ অ্যাডমিন বাতিল"
+                    : "👑 অ্যাডমিন করুন"}
+                </button>
+              </div>
+            ) : (
+              <p className="mt-3 text-xs text-slate-500">
+                ℹ️ এটি আপনার নিজের অ্যাকাউন্ট — নিজেকে পরিবর্তন করা যাবে না।
+              </p>
+            )}
+
+            {/* বিজ্ঞাপন */}
+            <div className="mt-4">
+              <h4 className="text-sm font-bold">
+                🏠 বিজ্ঞাপন ({selListings.length})
+              </h4>
+              {selListings.map((l) => (
+                <div
+                  key={l.id}
+                  className="mt-1 flex items-center justify-between gap-2 rounded-lg bg-slate-50 p-2 text-sm"
+                >
+                  <Link
+                    href={`/listing/${l.id}`}
+                    className="truncate font-medium hover:underline"
+                  >
+                    {l.title}
+                  </Link>
+                  <span className="badge whitespace-nowrap bg-slate-200 text-slate-700">
+                    {statusLabel(l.status)}
+                  </span>
+                </div>
+              ))}
+              {!selListings.length && (
+                <p className="mt-1 text-xs text-slate-400">
+                  কোনো বিজ্ঞাপন নেই
+                </p>
+              )}
+            </div>
+
+            {/* যোগাযোগ করেছে */}
+            <div className="mt-3">
+              <h4 className="text-sm font-bold">
+                📞 যোগাযোগ করেছে ({selInquiries.length})
+              </h4>
+              {selInquiries.map((q) => (
+                <div
+                  key={q.id}
+                  className="mt-1 rounded-lg bg-slate-50 p-2 text-sm"
+                >
+                  <Link
+                    href={`/listing/${q.listing_id}`}
+                    className="font-medium hover:underline"
+                  >
+                    🏠 {q.listings?.title || "ডিলিট হওয়া লিস্টিং"}
+                  </Link>
+                  <p className="text-xs text-slate-500">
+                    🕒 {bnDate(q.created_at)}
+                  </p>
+                </div>
+              ))}
+              {!selInquiries.length && (
+                <p className="mt-1 text-xs text-slate-400">
+                  কোনো যোগাযোগ নেই
+                </p>
+              )}
+            </div>
+
+            {/* ফিডব্যাক */}
+            <div className="mt-3">
+              <h4 className="text-sm font-bold">
+                💬 ফিডব্যাক ({selFeedback.length})
+              </h4>
+              {selFeedback.map((f) => (
+                <div
+                  key={f.id}
+                  className="mt-1 rounded-lg bg-slate-50 p-2 text-sm"
+                >
+                  <span className="badge bg-purple-100 text-purple-800">
+                    {feedbackTypeLabel(f.type)}
+                  </span>
+                  <p className="mt-1 whitespace-pre-wrap">{f.message}</p>
+                  <p className="text-xs text-slate-500">
+                    🕒 {bnDate(f.created_at)}
+                  </p>
+                </div>
+              ))}
+              {!selFeedback.length && (
+                <p className="mt-1 text-xs text-slate-400">
+                  কোনো ফিডব্যাক নেই
+                </p>
+              )}
+            </div>
+
+            {/* রেটিং */}
+            <div className="mt-3">
+              <h4 className="text-sm font-bold">
+                ⭐ রেটিং দিয়েছে ({selRatings.length})
+              </h4>
+              {selRatings.map((r) => (
+                <div
+                  key={r.id}
+                  className="mt-1 rounded-lg bg-slate-50 p-2 text-sm"
+                >
+                  <span className="badge bg-amber-100 text-amber-800">
+                    {"⭐".repeat(r.stars)} ({r.stars}/৫)
+                  </span>
+                  <Link
+                    href={`/listing/${r.listing_id}`}
+                    className="ml-2 font-medium hover:underline"
+                  >
+                    🏠 {r.listings?.title || "ডিলিট হওয়া লিস্টিং"}
+                  </Link>
+                  {r.comment && (
+                    <p className="mt-1 whitespace-pre-wrap">
+                      &ldquo;{r.comment}&rdquo;
+                    </p>
+                  )}
+                  <p className="text-xs text-slate-500">
+                    🕒 {bnDate(r.created_at)}
+                  </p>
+                </div>
+              ))}
+              {!selRatings.length && (
+                <p className="mt-1 text-xs text-slate-400">
+                  কোনো রেটিং নেই
+                </p>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>
