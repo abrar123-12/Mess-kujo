@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Listing, NearbyListing } from "@/lib/types";
 import ListingCard from "@/components/ListingCard";
@@ -9,7 +10,7 @@ import FilterBar from "@/components/FilterBar";
 
 const RADII = [2, 5, 10];
 
-export default function HomePage() {
+function HomePageContent() {
   const supabase = createClient();
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
@@ -99,6 +100,21 @@ export default function HomePage() {
     setRadius(r);
     if (nearMe && userLoc) fetchNearby(userLoc.lat, userLoc.lng, r);
   };
+
+  // মোবাইল বটম বারের "কাছাকাছি" থেকে ?nearme=1 এলে অটো চালু
+  const searchParams = useSearchParams();
+  const autoNearMeRef = useRef(false);
+  useEffect(() => {
+    if (searchParams.get("nearme") === "1") {
+      if (!autoNearMeRef.current && !nearMe) {
+        autoNearMeRef.current = true;
+        toggleNearMe();
+      }
+    } else {
+      autoNearMeRef.current = false;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const baseList: Listing[] = nearMe && nearResults ? nearResults : listings;
 
@@ -243,5 +259,13 @@ export default function HomePage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <Suspense fallback={null}>
+      <HomePageContent />
+    </Suspense>
   );
 }

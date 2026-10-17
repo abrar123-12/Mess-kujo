@@ -19,12 +19,15 @@ export default function LocationPicker({
   const mapDiv = useRef<HTMLDivElement>(null);
   const mapRef = useRef<import("leaflet").Map | null>(null);
   const markerRef = useRef<import("leaflet").Marker | null>(null);
+  const streetRef = useRef<import("leaflet").TileLayer | null>(null);
+  const satRef = useRef<import("leaflet").TileLayer | null>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
   const [ready, setReady] = useState(false);
   const [locating, setLocating] = useState(false);
   const [geoError, setGeoError] = useState("");
+  const [satView, setSatView] = useState(false);
 
   // ম্যাপ একবারই তৈরি হবে
   useEffect(() => {
@@ -35,11 +38,24 @@ export default function LocationPicker({
       if (cancelled || !mapDiv.current || mapRef.current) return;
 
       const map = L.map(mapDiv.current).setView([CTG.lat, CTG.lng], 12);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        maxZoom: 19,
-      }).addTo(map);
+      const street = L.tileLayer(
+        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        {
+          attribution:
+            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+          maxZoom: 19,
+        }
+      ).addTo(map);
+      const sat = L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        {
+          attribution:
+            "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics",
+          maxZoom: 19,
+        }
+      );
+      streetRef.current = street;
+      satRef.current = sat;
 
       // ম্যাপে ক্লিক → মার্কার বসবে
       map.on("click", (e: L.LeafletMouseEvent) => {
@@ -59,6 +75,23 @@ export default function LocationPicker({
       markerRef.current = null;
     };
   }, []);
+
+  // স্যাটেলাইট / ম্যাপ টগল
+  useEffect(() => {
+    if (!ready || !mapRef.current) return;
+    const map = mapRef.current;
+    if (satView) {
+      if (streetRef.current && map.hasLayer(streetRef.current))
+        map.removeLayer(streetRef.current);
+      if (satRef.current && !map.hasLayer(satRef.current))
+        satRef.current.addTo(map);
+    } else {
+      if (satRef.current && map.hasLayer(satRef.current))
+        map.removeLayer(satRef.current);
+      if (streetRef.current && !map.hasLayer(streetRef.current))
+        streetRef.current.addTo(map);
+    }
+  }, [ready, satView]);
 
   // value বদলালে মার্কার আপডেট (divIcon — কোনো ইমেজ ফাইল লাগে না)
   useEffect(() => {
@@ -123,10 +156,36 @@ export default function LocationPicker({
 
   return (
     <div>
-      <div
-        ref={mapDiv}
-        className="relative z-0 h-64 w-full rounded-lg border border-slate-300"
-      />
+      <div className="relative">
+        <div
+          ref={mapDiv}
+          className="relative z-0 h-64 w-full rounded-lg border border-slate-300"
+        />
+        {ready && (
+          <div className="absolute top-2 right-2 z-[1001] flex overflow-hidden rounded-lg border border-slate-300 bg-white text-xs font-bold shadow">
+            <button
+              type="button"
+              onClick={() => setSatView(false)}
+              className={`px-3 py-1.5 ${
+                !satView
+                  ? "bg-emerald-700 text-white"
+                  : "bg-white text-slate-700"
+              }`}
+            >
+              🗺️ ম্যাপ
+            </button>
+            <button
+              type="button"
+              onClick={() => setSatView(true)}
+              className={`px-3 py-1.5 ${
+                satView ? "bg-emerald-700 text-white" : "bg-white text-slate-700"
+              }`}
+            >
+              🛰️ স্যাটেলাইট
+            </button>
+          </div>
+        )}
+      </div>
       <p className="mt-1 text-xs text-slate-500">
         💡 ম্যাপে ট্যাপ করে লোকেশন বসান, চাইলে পিন টেনে সরাতে পারবেন
       </p>

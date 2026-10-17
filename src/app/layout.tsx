@@ -29,7 +29,7 @@ export default function RootLayout({
       </head>
       <body>
         <Header />
-        <main className="mx-auto max-w-6xl px-3 pb-16 md:px-4">{children}</main>
+        <main className="mx-auto max-w-6xl px-3 pb-20 md:px-4 md:pb-0">{children}</main>
         <footer className="border-t bg-white py-6 text-center text-sm text-slate-500">
           <p>🏠 মেস/সাবলেট খোঁজো — চট্টগ্রাম শহরের জন্য</p>
           <p className="mt-1 text-xs">
