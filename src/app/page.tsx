@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Listing } from "@/lib/types";
+import type { Listing, NearbyListing } from "@/lib/types";
 import ListingCard from "@/components/ListingCard";
 import FilterBar from "@/components/FilterBar";
+
+const RADII = [2, 5, 10];
 
 export default function HomePage() {
   const supabase = createClient();
@@ -15,6 +17,16 @@ export default function HomePage() {
   const [ward, setWard] = useState("");
   const [type, setType] = useState("");
   const [query, setQuery] = useState("");
+
+  // কাছাকাছি খোঁজা
+  const [nearMe, setNearMe] = useState(false);
+  const [radius, setRadius] = useState(5);
+  const [userLoc, setUserLoc] = useState<{ lat: number; lng: number } | null>(
+    null
+  );
+  const [nearResults, setNearResults] = useState<NearbyListing[] | null>(null);
+  const [nearLoading, setNearLoading] = useState(false);
+  const [nearError, setNearError] = useState("");
 
   useEffect(() => {
     const fetchListings = async () => {
@@ -34,7 +46,63 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const filtered = listings.filter((l) => {
+  const fetchNearby = async (lat: number, lng: number, r: number) => {
+    setNearLoading(true);
+    setNearError("");
+    const { data, error } = await supabase.rpc("nearby_listings", {
+      user_lat: lat,
+      user_lng: lng,
+      radius_km: r,
+    });
+    setNearLoading(false);
+    if (error) {
+      setNearError("❌ খোঁজার সময় সমস্যা হয়েছে, আবার চেষ্টা করুন");
+      return;
+    }
+    setNearResults((data as NearbyListing[]) || []);
+  };
+
+  const toggleNearMe = () => {
+    if (nearMe) {
+      setNearMe(false);
+      setNearResults(null);
+      setNearError("");
+      return;
+    }
+    setNearError("");
+    if (!navigator.geolocation) {
+      setNearError("আপনার ব্রাউজার লোকেশন সাপোর্ট করে না");
+      return;
+    }
+    setNearLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const loc = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+        };
+        setUserLoc(loc);
+        setNearMe(true);
+        fetchNearby(loc.lat, loc.lng, radius);
+      },
+      () => {
+        setNearLoading(false);
+        setNearError(
+          "😕 লোকেশন পাওয়া যায়নি — ব্রাউজার সেটিংসে লোকেশন পারমিশন দিন, তারপর আবার চেষ্টা করুন"
+        );
+      },
+      { timeout: 12000 }
+    );
+  };
+
+  const changeRadius = (r: number) => {
+    setRadius(r);
+    if (nearMe && userLoc) fetchNearby(userLoc.lat, userLoc.lng, r);
+  };
+
+  const baseList: Listing[] = nearMe && nearResults ? nearResults : listings;
+
+  const filtered = baseList.filter((l) => {
     if (thana && l.thana !== thana) return false;
     if (ward && l.ward !== ward) return false;
     if (type && l.type !== type) return false;
@@ -47,6 +115,9 @@ export default function HomePage() {
     }
     return true;
   });
+
+  const distanceOf = (l: Listing): number | undefined =>
+    "distance_km" in l ? (l as NearbyListing).distance_km : undefined;
 
   return (
     <div className="py-4">
@@ -64,6 +135,53 @@ export default function HomePage() {
         >
           + ফ্রিতে বিজ্ঞাপন দিন
         </Link>
+      </div>
+
+      {/* কাছাকাছি */}
+      <div className="card mt-4 p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={toggleNearMe}
+            disabled={nearLoading}
+            className={nearMe ? "btn-primary" : "btn-secondary"}
+          >
+            {nearMe ? "📍 কাছাকাছি: চালু ✖️" : "📍 আমার কাছাকাছি"}
+          </button>
+          {nearMe && (
+            <div className="flex items-center gap-1 text-sm">
+              <span className="text-slate-600">ব্যাসার্ধ:</span>
+              {RADII.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => changeRadius(r)}
+                  className={`rounded-lg px-3 py-1.5 font-semibold ${
+                    radius === r
+                      ? "bg-emerald-600 text-white"
+                      : "border border-slate-300 bg-white text-slate-700"
+                  }`}
+                >
+                  {r} কিমি
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        {nearLoading && !nearMe && (
+          <p className="mt-2 text-sm text-slate-600">
+            📡 আপনার লোকেশন নেওয়া হচ্ছে...
+          </p>
+        )}
+        {nearError && (
+          <p className="mt-2 rounded-lg bg-red-50 p-2 text-sm text-red-700">
+            {nearError}
+          </p>
+        )}
+        {nearMe && nearResults && (
+          <p className="mt-2 text-sm text-emerald-700">
+            ✅ {radius} কিমির মধ্যে {nearResults.length}টি বিজ্ঞাপন — দূরত্ব
+            অনুযায়ী সাজানো
+          </p>
+        )}
       </div>
 
       {/* ফিল্টার */}
@@ -88,9 +206,11 @@ export default function HomePage() {
 
       {/* লিস্টিং */}
       <p className="mt-4 text-sm text-slate-600">
-        {loading ? "লোড হচ্ছে..." : `${filtered.length}টি বিজ্ঞাপন পাওয়া গেছে`}
+        {loading || (nearMe && nearLoading)
+          ? "লোড হচ্ছে..."
+          : `${filtered.length}টি বিজ্ঞাপন পাওয়া গেছে`}
       </p>
-      {loading ? (
+      {loading || (nearMe && nearLoading) ? (
         <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
           {[...Array(8)].map((_, i) => (
             <div key={i} className="card animate-pulse">
@@ -107,7 +227,9 @@ export default function HomePage() {
           <p className="text-4xl">🔍</p>
           <p className="mt-2 font-semibold">কোনো বিজ্ঞাপন পাওয়া যায়নি</p>
           <p className="text-sm text-slate-500">
-            ফিল্টার বদলে দেখুন অথবা নতুন বিজ্ঞাপন দিন
+            {nearMe
+              ? "এই এলাকায় কোনো লোকেশন-সহ বিজ্ঞাপন নেই — ব্যাসার্ধ বাড়িয়ে দেখুন"
+              : "ফিল্টার বদলে দেখুন অথবা নতুন বিজ্ঞাপন দিন"}
           </p>
           <Link href="/post" className="btn-primary mt-4">
             + বিজ্ঞাপন দিন
@@ -116,7 +238,7 @@ export default function HomePage() {
       ) : (
         <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
           {filtered.map((l) => (
-            <ListingCard key={l.id} listing={l} />
+            <ListingCard key={l.id} listing={l} distanceKm={distanceOf(l)} />
           ))}
         </div>
       )}

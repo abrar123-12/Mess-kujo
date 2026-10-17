@@ -44,6 +44,12 @@ export default function Header() {
             >
               + বিজ্ঞাপন দিন
             </Link>
+            <Link
+              href="/feedback"
+              className="whitespace-nowrap rounded-lg px-3 py-1.5 hover:bg-emerald-600"
+            >
+              💬 ফিডব্যাক
+            </Link>
             {loggedIn ? (
               <>
                 <Link

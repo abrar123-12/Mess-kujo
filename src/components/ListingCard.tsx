@@ -15,7 +15,13 @@ export function getFavorites(): string[] {
   }
 }
 
-export default function ListingCard({ listing }: { listing: Listing }) {
+export default function ListingCard({
+  listing,
+  distanceKm,
+}: {
+  listing: Listing;
+  distanceKm?: number;
+}) {
   const [fav, setFav] = useState(false);
 
   useEffect(() => {
@@ -66,14 +72,19 @@ export default function ListingCard({ listing }: { listing: Listing }) {
         )}
       </div>
       <div className="p-3">
-        <div className="mb-1 flex items-center gap-2">
+        <div className="mb-1 flex flex-wrap items-center gap-2">
           <span className="badge bg-emerald-100 text-emerald-800">
             {typeLabel(listing.type)}
           </span>
-          <span className="text-xs text-slate-500">
-            📍 {listing.thana} • {listing.ward}
-          </span>
+          {distanceKm !== undefined && (
+            <span className="badge bg-blue-100 text-blue-800">
+              📍 {distanceKm.toFixed(1)} কিমি
+            </span>
+          )}
         </div>
+        <p className="mb-1 text-xs text-slate-500">
+          📍 {listing.thana} • {listing.ward}
+        </p>
         <h3 className="font-semibold leading-snug line-clamp-2 min-h-[2.6em]">
           {listing.title}
         </h3>

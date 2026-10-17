@@ -22,7 +22,46 @@ export interface Listing {
   views: number;
   expires_at: string;
   created_at: string;
+  lat: number | null;
+  lng: number | null;
   listing_photos: ListingPhoto[];
+}
+
+// nearby_listings RPC রেজাল্ট (distance_km সহ)
+export interface NearbyListing extends Listing {
+  distance_km: number;
+}
+
+export interface Feedback {
+  id: string;
+  user_id: string | null;
+  type: string;
+  message: string;
+  created_at: string;
+  profiles: { name: string | null; phone: string | null } | null;
+}
+
+// অ্যাডমিন প্যানেল: যোগাযোগ (inquiry) লগ
+export interface Inquiry {
+  id: string;
+  listing_id: string;
+  from_user_id: string | null;
+  message: string | null;
+  created_at: string;
+  listings: { title: string } | null;
+  profiles: { name: string | null; phone: string | null } | null;
+}
+
+// অ্যাডমিন প্যানেল: ভাড়া-পরবর্তী রেটিং
+export interface RentalFeedback {
+  id: string;
+  listing_id: string;
+  rater_id: string | null;
+  stars: number;
+  comment: string | null;
+  created_at: string;
+  listings: { title: string } | null;
+  profiles: { name: string | null; phone: string | null } | null;
 }
 
 export interface Profile {

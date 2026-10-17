@@ -4,8 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { THANAS, WARDS, LISTING_TYPES, typeLabel } from "@/lib/data";
+import LocationPicker, { type LatLng } from "@/components/LocationPicker";
 
-const STEPS = ["শিরোনাম", "এলাকা", "ভাড়া ও যোগাযোগ", "ছবি", "রিভিউ"];
+const STEPS = ["শিরোনাম", "এলাকা", "লোকেশন", "ভাড়া ও যোগাযোগ", "ছবি", "রিভিউ"];
+const LAST_STEP = STEPS.length - 1;
 
 export default function PostAdForm({ userId }: { userId: string }) {
   const router = useRouter();
@@ -17,6 +19,7 @@ export default function PostAdForm({ userId }: { userId: string }) {
   const [thana, setThana] = useState("");
   const [ward, setWard] = useState("");
   const [address, setAddress] = useState("");
+  const [loc, setLoc] = useState<LatLng | null>(null);
   const [rent, setRent] = useState("");
   const [phone, setPhone] = useState("");
   const [description, setDescription] = useState("");
@@ -43,7 +46,8 @@ export default function PostAdForm({ userId }: { userId: string }) {
   const validStep = () => {
     if (step === 0) return title.trim().length >= 5 && !!type;
     if (step === 1) return !!thana && !!ward;
-    if (step === 2)
+    if (step === 2) return true; // লোকেশন ঐচ্ছিক
+    if (step === 3)
       return (
         Number(rent) > 0 &&
         phone.replace(/\D/g, "").length >= 11 &&
@@ -56,7 +60,7 @@ export default function PostAdForm({ userId }: { userId: string }) {
     if (step === 0 && title.trim().length < 5)
       return "শিরোনাম কমপক্ষে ৫ অক্ষরের দিন";
     if (step === 1) return "থানা ও ওয়ার্ড দুটোই সিলেক্ট করুন";
-    if (step === 2) {
+    if (step === 3) {
       if (!(Number(rent) > 0)) return "সঠিক মাসিক ভাড়া দিন";
       if (phone.replace(/\D/g, "").length < 11)
         return "সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন";
@@ -79,6 +83,8 @@ export default function PostAdForm({ userId }: { userId: string }) {
           thana,
           ward,
           address: address.trim() || null,
+          lat: loc ? loc.lat : null,
+          lng: loc ? loc.lng : null,
           rent: Number(rent),
           phone: phone.trim(),
           description: description.trim(),
@@ -210,8 +216,22 @@ export default function PostAdForm({ userId }: { userId: string }) {
         </div>
       )}
 
-      {/* ধাপ ৩: ভাড়া ও যোগাযোগ */}
+      {/* ধাপ ৩: লোকেশন (ঐচ্ছিক) */}
       {step === 2 && (
+        <div className="space-y-3">
+          <div>
+            <label className="label">লোকেশন (ঐচ্ছিক)</label>
+            <LocationPicker value={loc} onChange={setLoc} />
+            <p className="mt-2 text-xs text-slate-500">
+              ℹ️ লোকেশন দিলে খোঁজার সময় "আমার কাছাকাছি" ফিল্টারে আপনার
+              বিজ্ঞাপন দেখাবে।
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ধাপ ৪: ভাড়া ও যোগাযোগ */}
+      {step === 3 && (
         <div className="space-y-3">
           <div>
             <label className="label">মাসিক ভাড়া (টাকা) *</label>
@@ -244,8 +264,8 @@ export default function PostAdForm({ userId }: { userId: string }) {
         </div>
       )}
 
-      {/* ধাপ ৪: ছবি */}
-      {step === 3 && (
+      {/* ধাপ ৫: ছবি */}
+      {step === 4 && (
         <div className="space-y-3">
           <label className="label">ছবি যোগ করুন (সর্বোচ্চ ৬টি, ঐচ্ছিক)</label>
           <label className="flex cursor-pointer flex-col items-center rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 p-6 text-center hover:border-emerald-500">
@@ -293,8 +313,8 @@ export default function PostAdForm({ userId }: { userId: string }) {
         </div>
       )}
 
-      {/* ধাপ ৫: রিভিউ */}
-      {step === 4 && (
+      {/* ধাপ ৬: রিভিউ */}
+      {step === 5 && (
         <div className="space-y-2 text-sm">
           <h3 className="font-bold">একবার দেখে নিন:</h3>
           <div className="rounded-lg bg-slate-50 p-3 space-y-1">
@@ -302,6 +322,7 @@ export default function PostAdForm({ userId }: { userId: string }) {
             <p><b>ধরন:</b> {typeLabel(type)}</p>
             <p><b>এলাকা:</b> {thana} • {ward}</p>
             {address && <p><b>ঠিকানা:</b> {address}</p>}
+            <p><b>লোকেশন:</b> {loc ? `📍 সেট করা আছে` : "দেওয়া হয়নি"}</p>
             <p><b>ভাড়া:</b> ৳{Number(rent).toLocaleString("en-US")}/মাস</p>
             <p><b>মোবাইল:</b> {phone}</p>
             <p><b>বর্ণনা:</b> {description}</p>
@@ -328,7 +349,7 @@ export default function PostAdForm({ userId }: { userId: string }) {
         >
           ← পেছনে
         </button>
-        {step < 4 ? (
+        {step < LAST_STEP ? (
           <button
             onClick={() => validStep() && setStep((s) => s + 1)}
             disabled={!validStep() || busy}

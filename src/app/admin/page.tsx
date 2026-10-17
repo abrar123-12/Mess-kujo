@@ -1,6 +1,12 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import type { Listing, Profile } from "@/lib/types";
+import type {
+  Listing,
+  Profile,
+  Feedback,
+  Inquiry,
+  RentalFeedback,
+} from "@/lib/types";
 import AdminClient from "@/components/AdminClient";
 
 export default async function AdminPage() {
@@ -30,16 +36,32 @@ export default async function AdminPage() {
     );
   }
 
-  const [{ data: users }, { data: listings }] = await Promise.all([
-    supabase.from("profiles").select("*").order("created_at", {
-      ascending: false,
-    }),
-    supabase
-      .from("listings")
-      .select("*, listing_photos(*)")
-      .order("created_at", { ascending: false })
-      .limit(500),
-  ]);
+  const [{ data: users }, { data: listings }, { data: feedback }, { data: inquiries }, { data: ratings }] =
+    await Promise.all([
+      supabase.from("profiles").select("*").order("created_at", {
+        ascending: false,
+      }),
+      supabase
+        .from("listings")
+        .select("*, listing_photos(*)")
+        .order("created_at", { ascending: false })
+        .limit(500),
+      supabase
+        .from("feedback")
+        .select("*, profiles(name, phone)")
+        .order("created_at", { ascending: false })
+        .limit(200),
+      supabase
+        .from("inquiries")
+        .select("*, listings(title), profiles(name, phone)")
+        .order("created_at", { ascending: false })
+        .limit(500),
+      supabase
+        .from("rental_feedback")
+        .select("*, listings(title), profiles(name, phone)")
+        .order("created_at", { ascending: false })
+        .limit(200),
+    ]);
 
   return (
     <div className="py-6">
@@ -50,6 +72,9 @@ export default async function AdminPage() {
       <AdminClient
         users={(users as Profile[]) || []}
         listings={(listings as Listing[]) || []}
+        feedback={(feedback as Feedback[]) || []}
+        inquiries={(inquiries as Inquiry[]) || []}
+        ratings={(ratings as RentalFeedback[]) || []}
       />
     </div>
   );

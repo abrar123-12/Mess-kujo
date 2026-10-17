@@ -136,6 +136,16 @@ export default function ListingDetail({
             📍 {listing.thana} • {listing.ward}
             {listing.address ? ` — ${listing.address}` : ""}
           </p>
+          {listing.lat != null && listing.lng != null && (
+            <a
+              href={`https://www.google.com/maps?q=${listing.lat},${listing.lng}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-primary mt-3 w-full"
+            >
+              🗺️ গুগল ম্যাপে দেখুন
+            </a>
+          )}
           <p className="mt-3 text-3xl font-bold text-emerald-700">
             ৳{listing.rent.toLocaleString("en-US")}
             <span className="text-sm font-normal text-slate-500">/মাস</span>

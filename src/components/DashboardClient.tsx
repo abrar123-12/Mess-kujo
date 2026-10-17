@@ -15,14 +15,49 @@ export default function DashboardClient({
   const [items, setItems] = useState(listings);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const refresh = () => window.location.reload();
+  // ভাড়া-পরবর্তী রেটিং প্রম্পট
+  const [ratingFor, setRatingFor] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
+  const [stars, setStars] = useState(5);
+  const [comment, setComment] = useState("");
+  const [ratingBusy, setRatingBusy] = useState(false);
 
-  const markRented = async (id: string) => {
+  const markRented = async (id: string, title: string) => {
     if (!confirm("নিশ্চিত ভাড়া হয়ে গেছে? লিস্টিংটি হাইড হয়ে যাবে।")) return;
     setBusyId(id);
-    await supabase.from("listings").update({ status: "rented" }).eq("id", id);
+    const { error } = await supabase
+      .from("listings")
+      .update({ status: "rented" })
+      .eq("id", id);
     setBusyId(null);
-    refresh();
+    if (error) return;
+    setItems((it) =>
+      it.map((l) => (l.id === id ? { ...l, status: "rented" } : l))
+    );
+    // রেটিং প্রম্পট দেখাও
+    setStars(5);
+    setComment("");
+    setRatingFor({ id, title });
+  };
+
+  const submitRating = async () => {
+    if (!ratingFor) return;
+    setRatingBusy(true);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      await supabase.from("rental_feedback").insert({
+        listing_id: ratingFor.id,
+        rater_id: user.id,
+        stars,
+        comment: comment.trim() || null,
+      });
+    }
+    setRatingBusy(false);
+    setRatingFor(null);
   };
 
   const renew = async (id: string) => {
@@ -33,7 +68,11 @@ export default function DashboardClient({
       .update({ status: "active", expires_at: expires })
       .eq("id", id);
     setBusyId(null);
-    refresh();
+    setItems((it) =>
+      it.map((l) =>
+        l.id === id ? { ...l, status: "active", expires_at: expires } : l
+      )
+    );
   };
 
   const remove = async (id: string) => {
@@ -107,7 +146,7 @@ export default function DashboardClient({
           <div className="mt-2 flex flex-wrap gap-2">
             {l.status === "active" && (
               <button
-                onClick={() => markRented(l.id)}
+                onClick={() => markRented(l.id, l.title)}
                 disabled={busyId === l.id}
                 className="btn-primary !px-3 !py-1.5 text-sm"
               >
@@ -133,6 +172,56 @@ export default function DashboardClient({
           </div>
         </div>
       ))}
+      {/* ভাড়া-পরবর্তী রেটিং প্রম্পট */}
+      {ratingFor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="card w-full max-w-sm p-5">
+            <p className="text-center text-4xl">🎉</p>
+            <h3 className="mt-2 text-center text-lg font-bold">
+              অভিনন্দন! ভাড়া হয়ে গেছে
+            </h3>
+            <p className="mt-1 text-center text-sm text-slate-600">
+              "{ratingFor.title}" — অভিজ্ঞতা কেমন ছিল?
+            </p>
+            <div className="mt-3 flex justify-center gap-1">
+              {[1, 2, 3, 4, 5].map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setStars(s)}
+                  aria-label={`${s} স্টার`}
+                  className="text-3xl"
+                >
+                  {s <= stars ? "⭐" : "☆"}
+                </button>
+              ))}
+            </div>
+            <textarea
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder="কিছু বলতে চান? (ঐচ্ছিক)"
+              rows={3}
+              className="mt-3"
+            />
+            <div className="mt-3 flex gap-2">
+              <button
+                onClick={submitRating}
+                disabled={ratingBusy}
+                className="btn-primary flex-1"
+              >
+                {ratingBusy ? "পাঠানো হচ্ছে..." : "পাঠান"}
+              </button>
+              <button
+                onClick={() => setRatingFor(null)}
+                disabled={ratingBusy}
+                className="btn-secondary"
+              >
+                বাদ দিন
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
