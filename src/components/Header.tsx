@@ -4,9 +4,11 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import NotificationBell from "@/components/NotificationBell";
 
 export default function Header() {
   const [loggedIn, setLoggedIn] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
   const [nearmeActive, setNearmeActive] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
@@ -15,11 +17,13 @@ export default function Header() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setLoggedIn(!!data.session);
+      setUserId(data.session?.user.id ?? null);
     });
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setLoggedIn(!!session);
+      setUserId(session?.user.id ?? null);
     });
     return () => subscription.unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -71,6 +75,9 @@ export default function Header() {
               >
                 💬 ফিডব্যাক
               </Link>
+              {loggedIn && userId && (
+                <NotificationBell userId={userId} variant="desktop" />
+              )}
               {loggedIn ? (
                 <>
                   <Link
@@ -123,7 +130,11 @@ export default function Header() {
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         aria-label="মোবাইল নেভিগেশন"
       >
-        <div className="grid grid-cols-5 items-stretch">
+        <div
+          className={`grid items-stretch ${
+            loggedIn && userId ? "grid-cols-6" : "grid-cols-5"
+          }`}
+        >
           <Link href="/" className={tabCls(pathname === "/" && !nearmeActive)}>
             <span className="text-xl">🏠</span>
             <span>হোম</span>
@@ -147,6 +158,9 @@ export default function Header() {
               বিজ্ঞাপন
             </span>
           </Link>
+          {loggedIn && userId && (
+            <NotificationBell userId={userId} variant="mobile" />
+          )}
           <Link
             href="/feedback"
             className={tabCls(pathname === "/feedback")}

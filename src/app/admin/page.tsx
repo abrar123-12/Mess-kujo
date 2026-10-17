@@ -6,6 +6,7 @@ import type {
   Feedback,
   Inquiry,
   RentalFeedback,
+  Notification,
 } from "@/lib/types";
 import AdminClient from "@/components/AdminClient";
 
@@ -36,7 +37,7 @@ export default async function AdminPage() {
     );
   }
 
-  const [{ data: users }, { data: listings }, { data: feedback }, { data: inquiries }, { data: ratings }] =
+  const [{ data: users }, { data: listings }, { data: feedback }, { data: inquiries }, { data: ratings }, { data: notifications }] =
     await Promise.all([
       supabase.from("profiles").select("*").order("created_at", {
         ascending: false,
@@ -61,6 +62,11 @@ export default async function AdminPage() {
         .select("*, listings(title), profiles(name, phone)")
         .order("created_at", { ascending: false })
         .limit(200),
+      supabase
+        .from("notifications")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(200),
     ]);
 
   return (
@@ -75,6 +81,7 @@ export default async function AdminPage() {
         feedback={(feedback as Feedback[]) || []}
         inquiries={(inquiries as Inquiry[]) || []}
         ratings={(ratings as RentalFeedback[]) || []}
+        notifications={(notifications as Notification[]) || []}
         currentUserId={user.id}
       />
     </div>

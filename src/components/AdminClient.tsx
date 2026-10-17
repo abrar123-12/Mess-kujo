@@ -9,10 +9,11 @@ import type {
   Feedback,
   Inquiry,
   RentalFeedback,
+  Notification,
 } from "@/lib/types";
 import { typeLabel, statusLabel } from "@/lib/data";
 
-type Tab = "listings" | "users" | "feedback" | "inquiries" | "ratings";
+type Tab = "listings" | "users" | "feedback" | "inquiries" | "ratings" | "notices";
 
 function feedbackTypeLabel(t: string): string {
   if (t === "bug") return "🐞 সমস্যা";
@@ -33,6 +34,7 @@ export default function AdminClient({
   feedback,
   inquiries,
   ratings,
+  notifications,
   currentUserId,
 }: {
   users: Profile[];
@@ -40,6 +42,7 @@ export default function AdminClient({
   feedback: Feedback[];
   inquiries: Inquiry[];
   ratings: RentalFeedback[];
+  notifications: Notification[];
   currentUserId: string;
 }) {
   const supabase = createClient();
@@ -49,6 +52,14 @@ export default function AdminClient({
   const [userSearch, setUserSearch] = useState("");
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // নোটিশ ফর্ম
+  const [noticeList, setNoticeList] = useState(notifications);
+  const [nTitle, setNTitle] = useState("");
+  const [nMessage, setNMessage] = useState("");
+  const [nTarget, setNTarget] = useState<"all" | "user">("all");
+  const [nUserSearch, setNUserSearch] = useState("");
+  const [nSelectedUserId, setNSelectedUserId] = useState<string | null>(null);
+  const [nSending, setNSending] = useState(false);
 
   const feature = async (id: string) => {
     setBusyId(id);
@@ -160,6 +171,78 @@ export default function AdminClient({
     setBusyId(null);
   };
 
+  // ---------- নোটিশ পাঠানো ----------
+  const sendNotice = async () => {
+    const title = nTitle.trim();
+    const message = nMessage.trim();
+    if (!title || !message) {
+      alert("⚠️ শিরোনাম ও মেসেজ দুটোই লিখুন");
+      return;
+    }
+    const targetId = nTarget === "user" ? nSelectedUserId : null;
+    if (nTarget === "user" && !targetId) {
+      alert("⚠️ একজন ইউজার সিলেক্ট করুন");
+      return;
+    }
+    setNSending(true);
+    const { data, error } = await supabase
+      .from("notifications")
+      .insert({
+        title,
+        message,
+        target_user_id: targetId,
+        created_by: currentUserId,
+      })
+      .select()
+      .single();
+    if (error) {
+      alert("❌ ব্যর্থ: " + error.message);
+    } else {
+      setNoticeList((list) => [data as Notification, ...list]);
+      setNTitle("");
+      setNMessage("");
+      setNTarget("all");
+      setNSelectedUserId(null);
+      setNUserSearch("");
+      alert("✅ নোটিশ পাঠানো হয়েছে!");
+    }
+    setNSending(false);
+  };
+
+  const deleteNotice = async (id: string) => {
+    if (!confirm("🗑️ এই নোটিশটি ডিলিট করবেন?")) return;
+    const { error } = await supabase
+      .from("notifications")
+      .delete()
+      .eq("id", id);
+    if (error) {
+      alert("❌ ব্যর্থ: " + error.message);
+    } else {
+      setNoticeList((list) => list.filter((n) => n.id !== id));
+    }
+  };
+
+  const noticeTargetLabel = (n: Notification): string => {
+    if (!n.target_user_id) return "📢 সবাই";
+    const u = userList.find((x) => x.id === n.target_user_id);
+    return `👤 ${u?.name || u?.phone || u?.email || "ইউজার"}`;
+  };
+
+  // নোটিশ টার্গেটের জন্য ইউজার সার্চ
+  const nq = nUserSearch.trim().toLowerCase();
+  const nFilteredUsers = userList
+    .filter(
+      (u) =>
+        !nq ||
+        (u.name || "").toLowerCase().includes(nq) ||
+        (u.phone || "").toLowerCase().includes(nq) ||
+        (u.email || "").toLowerCase().includes(nq)
+    )
+    .slice(0, 8);
+  const nSelectedUser = nSelectedUserId
+    ? userList.find((u) => u.id === nSelectedUserId) ?? null
+    : null;
+
   // ইউজার পরিসংখ্যান
   const weekAgo = Date.now() - 7 * 86400000;
   const statTotal = userList.length;
@@ -233,6 +316,7 @@ export default function AdminClient({
         {tabBtn("feedback", `💬 ফিডব্যাক (${feedback.length})`)}
         {tabBtn("inquiries", `📞 যোগাযোগ (${inquiries.length})`)}
         {tabBtn("ratings", `⭐ রেটিং (${ratings.length})`)}
+        {tabBtn("notices", `🔔 নোটিশ (${noticeList.length})`)}
       </div>
 
       {tab === "users" && (
@@ -599,6 +683,154 @@ export default function AdminClient({
           )}
         </div>
       )}
+      {tab === "notices" && (
+        <div className="space-y-3">
+          {/* নোটিশ পাঠানোর ফর্ম */}
+          <div className="card space-y-3 p-4">
+            <h3 className="font-bold">📣 নতুন নোটিশ পাঠান</h3>
+            <input
+              type="text"
+              value={nTitle}
+              onChange={(e) => setNTitle(e.target.value)}
+              placeholder="শিরোনাম (যেমন: ঈদ অফার! 🎉)"
+              maxLength={120}
+              className="w-full"
+            />
+            <textarea
+              value={nMessage}
+              onChange={(e) => setNMessage(e.target.value)}
+              placeholder="মেসেজ লিখুন... (ইউজারদের 🔔 বেলে দেখাবে)"
+              rows={3}
+              className="w-full"
+            />
+            {/* টার্গেট সিলেক্ট */}
+            <div className="flex flex-wrap gap-2">
+              <label
+                className={`cursor-pointer rounded-lg border px-4 py-2 text-sm font-semibold ${
+                  nTarget === "all"
+                    ? "border-emerald-600 bg-emerald-50 text-emerald-800"
+                    : "border-slate-300"
+                }`}
+              >
+                <input
+                  type="radio"
+                  checked={nTarget === "all"}
+                  onChange={() => setNTarget("all")}
+                  className="mr-1.5"
+                />
+                📢 সবাইকে
+              </label>
+              <label
+                className={`cursor-pointer rounded-lg border px-4 py-2 text-sm font-semibold ${
+                  nTarget === "user"
+                    ? "border-emerald-600 bg-emerald-50 text-emerald-800"
+                    : "border-slate-300"
+                }`}
+              >
+                <input
+                  type="radio"
+                  checked={nTarget === "user"}
+                  onChange={() => setNTarget("user")}
+                  className="mr-1.5"
+                />
+                👤 নির্দিষ্ট ইউজার
+              </label>
+            </div>
+            {nTarget === "user" && (
+              <div className="space-y-2">
+                {nSelectedUser ? (
+                  <div className="flex items-center justify-between rounded-lg bg-emerald-50 px-3 py-2 text-sm">
+                    <span className="font-semibold">
+                      ✓ {nSelectedUser.name || "নাম নেই"}
+                      {nSelectedUser.phone
+                        ? ` • 📞 ${nSelectedUser.phone}`
+                        : ""}
+                    </span>
+                    <button
+                      onClick={() => setNSelectedUserId(null)}
+                      className="text-slate-500 hover:text-red-600"
+                    >
+                      ✕ বদলান
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <input
+                      type="search"
+                      value={nUserSearch}
+                      onChange={(e) => setNUserSearch(e.target.value)}
+                      placeholder="🔍 নাম / ফোন / ইমেইল দিয়ে খুঁজুন..."
+                      className="w-full"
+                    />
+                    <div className="max-h-44 space-y-1 overflow-y-auto">
+                      {nFilteredUsers.map((u) => (
+                        <button
+                          key={u.id}
+                          onClick={() => setNSelectedUserId(u.id)}
+                          className="block w-full rounded-lg border border-slate-200 px-3 py-2 text-left text-sm hover:bg-emerald-50"
+                        >
+                          <span className="font-semibold">
+                            {u.name || "নাম নেই"}
+                          </span>
+                          <span className="ml-2 text-xs text-slate-500">
+                            {u.phone || u.email || ""}
+                          </span>
+                        </button>
+                      ))}
+                      {!nFilteredUsers.length && (
+                        <p className="p-3 text-center text-xs text-slate-400">
+                          🔍 কিছু পাওয়া যায়নি
+                        </p>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+            <button
+              onClick={sendNotice}
+              disabled={nSending}
+              className="btn-primary w-full disabled:opacity-50"
+            >
+              {nSending ? "⏳ পাঠানো হচ্ছে..." : "📨 নোটিশ পাঠান"}
+            </button>
+          </div>
+
+          {/* পাঠানো নোটিশের তালিকা */}
+          <h3 className="font-bold">📜 পাঠানো নোটিশ</h3>
+          {noticeList.map((n) => (
+            <div key={n.id} className="card p-3 text-sm">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="font-bold">{n.title}</p>
+                  <p className="mt-1 whitespace-pre-wrap text-slate-600">
+                    {n.message}
+                  </p>
+                  <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                    <span className="badge bg-blue-100 text-blue-800">
+                      {noticeTargetLabel(n)}
+                    </span>
+                    <span>🕒 {bnDate(n.created_at)}</span>
+                  </p>
+                </div>
+                <button
+                  onClick={() => deleteNotice(n.id)}
+                  title="ডিলিট"
+                  className="shrink-0 rounded-lg border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+                >
+                  🗑️
+                </button>
+              </div>
+            </div>
+          ))}
+          {!noticeList.length && (
+            <p className="card p-6 text-center text-slate-500">
+              এখনো কোনো নোটিশ পাঠানো হয়নি
+            </p>
+          )}
+        </div>
+      )}
+
       {/* ইউজার ডিটেইল মোডাল */}
       {selected && (
         <div

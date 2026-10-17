@@ -79,3 +79,14 @@ export interface DashboardListing extends Listing {
   inquiry_count: number;
   nudge_count: number;
 }
+
+// অ্যাডমিন → ইউজার নোটিফিকেশন
+// target_user_id NULL মানে: সব ইউজারের জন্য (ব্রডকাস্ট)
+export interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  target_user_id: string | null;
+  created_by: string | null;
+  created_at: string;
+}
