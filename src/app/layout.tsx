@@ -2,10 +2,48 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Header from "@/components/Header";
 
+const SITE_URL = "https://mess-kujo.vercel.app";
+const SITE_TITLE = "মেস/সাবলেট খোঁজো | চট্টগ্রাম";
+const SITE_DESC =
+  "চট্টগ্রাম শহরে মেস সিট, সাবলেট ও রুম খুঁজুন — থানা ও ওয়ার্ড অনুযায়ী। সরাসরি মালিকের সাথে চ্যাট, সম্পূর্ণ ফ্রি, কোনো দালাল নেই!";
+
 export const metadata: Metadata = {
-  title: "মেস/সাবলেট খোঁজো | চট্টগ্রাম",
-  description:
-    "চট্টগ্রাম শহরে মেস সিট, সাবলেট ও রুম খুঁজুন — থানা ও ওয়ার্ড অনুযায়ী।",
+  metadataBase: new URL(SITE_URL),
+  title: SITE_TITLE,
+  description: SITE_DESC,
+  keywords: [
+    "মেস ভাড়া চট্টগ্রাম",
+    "সাবলেট চট্টগ্রাম",
+    "mess rent chattogram",
+    "room rent chittagong",
+    "bachelor mess chattogram",
+  ],
+  openGraph: {
+    type: "website",
+    locale: "bn_BD",
+    url: SITE_URL,
+    siteName: "মেস/সাবলেট খোঁজো",
+    title: SITE_TITLE,
+    description: SITE_DESC,
+    images: [
+      {
+        url: "/og.png",
+        width: 1200,
+        height: 630,
+        alt: "মেস/সাবলেট খোঁজো — চট্টগ্রামে মেস, সাবলেট ও রুম খুঁজুন",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_TITLE,
+    description: SITE_DESC,
+    images: ["/og.png"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export default function RootLayout({
